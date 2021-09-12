@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="app">
+      <p>
+        {{message}}
+        <span>hello</span>
+      </p>
+    </div>
+    <script src="./vue.js"></script>
+    <script>
+      const vm = new Vue({
+        el: '#app',
+        data() {
+          return {
+            message: 'ws',
+            arr: [{ a: 1 }],
+          };
+        },
+      });
+
+      vm.arr = 100;
+
+      /* 
+        1. new Vue会调用_init方法进行初始化操作
+        2. 判断有没有data，如果有调用initState
+        3. 判断data是否是函数，如果是取他的返回值，如果是对象则直接使用
+        4. 对data里面的数据进行监测劫持，并对已监测的数据打上标记，防止重复监测，如果是对象的话，则对对象的每个属性进行劫持，并对其属性值也进行判断递归劫持
+        如果是数组则改写它的原型，当调用数组添加的变异方法时，会先调用数组变异方法，
+        然后对添加的内容进行判断，如果是数组继续改写其原型，如果是对象，则遍历对象的每个属性并对其进行劫持，
+        对每个属性值也进行判断递归劫持
+        5. 为了取值方便，能直接从vue的实例对象上取值，实现方法是数据劫持让其从vm._data，也就是最终得到的要监测的data中取值
+      */
+    </script>
+  </body>
+</html>
