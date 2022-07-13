@@ -4,32 +4,56 @@ const startTagOpen = new RegExp(`^<${qnameCapture}`); //  此正则可以匹配�
 const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`); // 匹配标签结尾的 </div>  [1]
 const attribute =
   /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
-console.log('aaa=xxx'.match(attribute)); // [1]是属性的key [3] || [4] || [5]是属性的值
 
 const startTagClose = /^\s*(\/?)>/; // 匹配标签结束的  />    >
-const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{   xxx  }}
 
 // Vue3的编译原理比Vue2好很多， 没有那么多正则了
-function parserHTML (html) {
-  function start (tagName, attrs) {
-    console.log('start', tagName, attrs);
+export default function parserHTML(html) {
+  let stack = [];
+  let root = null;
+
+  function createASTElment(tag, attrs, parent = null) {
+    return {
+      type: 1,
+      tag,
+      parent,
+      attrs,
+      children: [],
+    };
   }
 
-  function end (tagName) {
-    console.log('end', tagName);
+  function start(tagName, attrs) {
+    let parent = stack[stack.length - 1];
+    let element = createASTElment(tagName, attrs, parent);
+    root === null && (root = element);
+
+    parent && parent.children.push(element);
+
+    stack.push(element);
   }
 
-  function text (chars) {
-    console.log('chars', chars);
+  function end(tagName) {
+    stack.pop().tag !== tagName && console.log('标签出错');
   }
 
-  function advance (len) {
+  function text(chars) {
+    let parent = stack[stack.length - 1];
+    chars = chars.replace(/\s/g, '');
+    parent &&
+      chars &&
+      parent.children.push({
+        type: 2,
+        text: chars,
+      });
+  }
+
+  function advance(len) {
     html = html.substring(len);
   }
 
-  function parseStartTag () {
+  function parseStartTag() {
     const start = html.match(startTagOpen);
-    
+
     if (start) {
       const match = {
         tagName: start[1],
@@ -90,9 +114,6 @@ function parserHTML (html) {
       advance(chars.length);
     }
   }
-}
 
-export function compileToFunction (template) {
-  // 1.将模板变成ast语法树
-  let ast = parserHTML(template);
+  return root;
 }

@@ -10,11 +10,11 @@ const startTagClose = /^\s*(\/?)>/; // 匹配标签结束的  />    >
 const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{   xxx  }}
 
 // Vue3的编译原理比Vue2好很多， 没有那么多正则了
-export default function parserHTML(html) {
+export default function parserHTML (html) {
   let stack = [];
   let root = null;
 
-  function createASTElment(tag, attrs, parent = null) {
+  function createASTElment (tag, attrs, parent = null) {
     return {
       type: 1,
       tag,
@@ -24,23 +24,21 @@ export default function parserHTML(html) {
     };
   }
 
-  function start(tagName, attrs) {
+  function start (tagName, attrs) {
     let parent = stack[stack.length - 1];
     let element = createASTElment(tagName, attrs, parent);
     root === null && (root = element);
 
-    if (parent) {
-      parent.children.push(element);
-    }
+    parent && parent.children.push(element);
 
     stack.push(element);
   }
 
-  function end(tagName) {
+  function end (tagName) {
     stack.pop().tag !== tagName && console.log('标签出错');
   }
 
-  function text(chars) {
+  function text (chars) {
     let parent = stack[stack.length - 1];
     chars = chars.replace(/\s/g, '');
     parent &&
@@ -51,11 +49,11 @@ export default function parserHTML(html) {
       });
   }
 
-  function advance(len) {
+  function advance (len) {
     html = html.substring(len);
   }
 
-  function parseStartTag() {
+  function parseStartTag () {
     const start = html.match(startTagOpen);
 
     if (start) {

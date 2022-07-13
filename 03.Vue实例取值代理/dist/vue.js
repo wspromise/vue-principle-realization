@@ -33,11 +33,13 @@
 
     Object.defineProperty(data, key, {
       get() {
+        console.log(222);
         return value;
       },
 
       set(newValue) {
         if (newValue === value) return;
+        observe(newValue);
         value = newValue;
       }
 
@@ -65,18 +67,19 @@
     observe(data);
 
     for (const key in data) {
-      proxy(vm, key, data[key]);
+      proxy(vm, key, '_data');
     }
   }
 
-  function proxy(vm, key, value) {
+  function proxy(vm, key, source) {
     Object.defineProperty(vm, key, {
       get() {
-        return value;
+        console.log(111);
+        return vm[source][key];
       },
 
       set(newValue) {
-        value = newValue;
+        vm[source][key] = newValue;
       }
 
     });
