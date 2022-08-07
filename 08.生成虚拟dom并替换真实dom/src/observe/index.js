@@ -47,7 +47,6 @@ function ObjectReactive(data, key, value) {
   // 使data中每个属性变成响应式的
   Object.defineProperty(data, key, {
     get() {
-      console.log(777);
       return value;
     },
 
@@ -56,7 +55,6 @@ function ObjectReactive(data, key, value) {
       // 对newValue进行监测，如vm.message = {a: 100},那么{a: 100}也是响应式的
       observe(newValue);
       value = newValue;
-      console.log(newValue, 'newValue');
     },
   });
 }

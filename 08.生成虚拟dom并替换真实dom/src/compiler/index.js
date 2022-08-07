@@ -4,7 +4,6 @@ import parserHTML from './parser';
 export function compileToFunction(template) {
   // 1.将模板变成ast语法树
   let ast = parserHTML(template);
-  console.log(ast);
 
   // 2.代码生成
   let code = generate(ast); // 模板引擎的实现原理都是new Function + with  (ejs, jade等模板引擎都是这样实现的)

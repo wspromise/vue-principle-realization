@@ -19,6 +19,7 @@ export function initMixin(Vue) {
   };
 
   Vue.prototype.$mount = function (el) {
+    const vm = this;
     // 获取真实DOM
     el = document.querySelector(el);
     // 将DOM挂载到实例上

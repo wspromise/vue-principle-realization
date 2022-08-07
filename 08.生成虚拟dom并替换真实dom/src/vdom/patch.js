@@ -14,7 +14,7 @@ function createElm(vnode) {
   if (typeof tag === 'string') {
     vnode.el = document.createElement(tag);
     // 如果有data属性，把他设置到元素上
-    updateProperties(el, data);
+    updateProperties(vm.$el, data);
 
     children.forEach((child) => vnode.el.appendChild(createElm(child)));
   } else {

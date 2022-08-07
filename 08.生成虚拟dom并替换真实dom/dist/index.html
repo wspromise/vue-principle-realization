@@ -9,7 +9,7 @@
 
 <body>
     <div id="app" style="color:red">
-        <span>aaa {{name}} bbb {{age}} ccc</span>
+        <span>aaa-{{name}}-bbb-{{age}}-ccc</span>
     </div>
     <script src="./vue.js"></script>
     <script>
@@ -17,8 +17,8 @@
             el: '#app',
             data () {
                 return {
-                    message: 'ws',
-                    arr: [{ a: 1 }],
+                    name: 'ws',
+                    age: 12
                 };
             },
         });

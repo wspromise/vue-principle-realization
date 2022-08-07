@@ -1,4 +1,5 @@
 import { initMixin } from './init';
+import { lifeCycleMixin } from './lifecycle';
 import { renderMixin } from './render';
 
 // Vue2的响应式原理是靠Object.defineProperty(), 双向绑定原理是靠v-model
