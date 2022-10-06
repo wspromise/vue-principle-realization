@@ -1,6 +1,6 @@
 export function patch(el, vnode) {
   // 删除老节点，根据vnode创建新节点，替换掉老节点
-  const elm = createElm(vnode); // 根据虚拟节点创建虚拟节点
+  const elm = createElm(vnode); // 根据虚拟节点创建真实节点
   const parentNode = el.parentNode;
   //  el.nextSibling不存在就是null,如果为null那insertBefore就是appendChild
   parentNode.insertBefore(elm, el.nextSibling);

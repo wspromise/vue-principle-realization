@@ -1,0 +1,605 @@
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+  typeof define === 'function' && define.amd ? define(factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
+}(this, (function () { 'use strict';
+
+  function getDataType(target) {
+    return Object.prototype.toString.call(target).slice(8, -1);
+  }
+  const isObject = val => getDataType(val) === 'Object';
+
+  let arrayPrototype = Array.prototype; // arrayMethods的原型是Array.prototype
+
+  let arrayMethods = Object.create(arrayPrototype); // 数组的变异方法
+
+  let arrayList = ['push', 'pop', 'shift', 'unshift', 'reverse', 'splice', 'sort'];
+  arrayList.forEach(method => {
+    arrayMethods[method] = function (...args) {
+      // 数组调用变异方法，先调用数组原生的方法
+      arrayPrototype[method].call(this, ...args);
+      let inserted = null;
+
+      switch (method) {
+        case 'splice':
+          inserted = args.slice(2);
+          break;
+
+        case 'push':
+        case 'unshift':
+          inserted = args;
+      }
+
+      inserted && this.__ob__.observeArr(inserted);
+    };
+  });
+
+  let id$1 = 0;
+
+  class Dep {
+    constructor() {
+      this.subs = [];
+      this.id = id$1++;
+    }
+
+    depend() {
+      // 在Watcher中添加dep
+      Dep.target.addDep(this);
+    }
+
+    addSub(watcher) {
+      // 在dep中添加watcher
+      this.subs.push(watcher);
+    }
+
+    notify() {
+      this.subs.forEach(watcher => watcher.update());
+    }
+
+  }
+
+  Dep.target = null; // 定义一个全局变量
+
+  class Observe {
+    constructor(data) {
+      // 在data上加上属性__ob__, 一是在数组变异方法中能拿到Observe实例，进行监测数组和对象， 二是对已经监测的数据打上标记
+      Object.defineProperty(data, '__ob__', {
+        value: this,
+        // this是Observe实例
+        enumerable: false
+      });
+
+      if (Array.isArray(data)) {
+        // 如果是数组改写数组的原型
+        data.__proto__ = arrayMethods; // 递归监测数组
+
+        this.observeArr(data);
+      } else {
+        // 递归监测对象
+        this.walk(data);
+      }
+    } // 监测数组中的每一项数据
+
+
+    observeArr(data) {
+      data.forEach(item => observe(item));
+    } // 监测对象中的每一项数据
+
+
+    walk(data) {
+      Object.keys(data).forEach(key => {
+        ObjectReactive(data, key, data[key]);
+      });
+    }
+
+  } // Vue2性能差就差在这个方法中，需要一加载时就递归调用defineProperty,耗性能
+  // 性能优化原则
+  // 1. 不要把所有数据都放在data中，否则都会添加get和set
+  // 2. 数据层级不要过深，尽量扁平化数据
+  // 3. 不要频繁的获取数据（每次获取数据都会调其get方法， get方法后期会有很多逻辑，耗性能）
+  // 4. 如果数据不需要响应式，可以调用Object.freeze()冻结对象属性
+
+
+  function ObjectReactive(data, key, value) {
+    // value也可能是可监测数据， 对value进行递归监测
+    observe(value);
+    let dep = new Dep(); // 使data中每个属性变成响应式的
+
+    Object.defineProperty(data, key, {
+      get() {
+        // 有没有watcher
+        if (Dep.target) {
+          // 让watcher记住dep
+          dep.depend();
+        }
+
+        return value;
+      },
+
+      set(newValue) {
+        if (newValue === value) return; // 对newValue进行监测，如vm.message = {a: 100},那么{a: 100}也是响应式的
+
+        observe(newValue);
+        value = newValue;
+        dep.notify(); // 通知当前dep里面的watcher依次执行
+      }
+
+    });
+  }
+
+  function observe(data) {
+    // 如果data不是一个对象和数组(data中某个属性值可能是数组)则不再进行监测
+    if (getDataType(data) !== 'Object' && getDataType(data) !== 'Array' || data.__ob__) return; // 监测数据， 用类实现
+
+    new Observe(data);
+  }
+
+  function initState(vm) {
+    const options = vm.$options;
+    options.data && initData(vm); // 如果有data则进行初始化
+  }
+
+  function initData(vm) {
+    let data = vm.$options.data; // 获取data选项
+    // 判断data是否是函数， 如果是则调用得到对象，如果是对象则直接使用即可
+
+    data = vm._data = getDataType(data) === 'Function' ? data.call(vm) : data; // 观测数据，使用Object.defineProperty()来使data中数据变成响应式的
+
+    observe(data); // 遍历data做数据代理，通过vm访问属性代理到vm._data也就是最终得到的data里
+
+    for (const key in data) {
+      proxy(vm, key, '_data');
+    }
+  }
+
+  function proxy(vm, key, source) {
+    Object.defineProperty(vm, key, {
+      get() {
+        return vm[source][key];
+      },
+
+      set(newValue) {
+        vm[source][key] = newValue;
+      }
+
+    });
+  }
+
+  const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{   xxx  }}
+
+  /**
+   * 生成属性
+   * @param {*} attrs 属性
+   * @returns
+   */
+
+  function genProps(attrs) {
+    let str = '';
+
+    for (let i = 0; i < attrs.length; i++) {
+      let attr = attrs[i];
+
+      if (attr.name === 'style') {
+        let styles = {};
+        attr.value.replace(/([^;:]+):([^;:]+)/g, function () {
+          styles[arguments[1]] = arguments[2];
+        });
+        attr.value = styles;
+      }
+
+      str += `${attr.name}:${JSON.stringify(attr.value)},`;
+    }
+
+    return `{${str.slice(0, -1)}}`;
+  }
+
+  function gen(el) {
+    if (el.type === 1) {
+      // 如果是元素就递归生成
+      return generate(el);
+    } else {
+      let text = el.text; // 普通文本
+
+      if (!defaultTagRE.test(text)) return `_v(${text})`; // 说明文本里面有表达式
+      // 如果正则 +g 配合exec就会有一个问题 lastIndex的问题， 所以每次调gen方法的时候正则的lastIndex要重置
+
+      let lastIndex = defaultTagRE.lastIndex = 0;
+      let match;
+      let tokens = [];
+
+      while (match = defaultTagRE.exec(text)) {
+        const index = match.index;
+
+        if (index > lastIndex) {
+          const firstText = text.slice(lastIndex, index);
+          tokens.push(JSON.stringify(firstText));
+        } // 添加变量
+
+
+        tokens.push(`_s(${match[1].trim()})`);
+        lastIndex = index + match[0].length;
+      } // 到最后有可能还剩余一段 <div> aaa</div>
+
+
+      if (lastIndex < text.length) {
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
+      }
+
+      return `_v(${tokens.join('+')})`; // webpack源码 css-loader 图片处理都是这样处理
+    }
+  }
+
+  function genChildren(el) {
+    let children = el.children;
+
+    if (children) {
+      return children.map(item => gen(item)).join(',');
+    }
+
+    return false;
+  }
+  /**
+   * 生成模板字符串
+   * @param {*} ast ast语法树对象
+   * @returns
+   */
+
+
+  function generate(ast) {
+    // 生成children
+    let children = genChildren(ast); // 模板字符串
+
+    let code = `_c(
+    '${ast.tag}',${ast.attrs.length ? genProps(ast.attrs) : 'undefined'}${children ? `,${children}` : ''})`;
+    return code;
+  }
+
+  const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z]*`; // 匹配标签名的  aa-xxx
+
+  const qnameCapture = `((?:${ncname}\\:)?${ncname})`; //  aa:aa-xxx
+
+  const startTagOpen = new RegExp(`^<${qnameCapture}`); //  此正则可以匹配到标签名 匹配到结果的第一个(索引第一个) [1]
+
+  const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`); // 匹配标签结尾的 </div>  [1]
+
+  const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
+
+  const startTagClose = /^\s*(\/?)>/; // 匹配标签结束的  />    >
+  // Vue3的编译原理比Vue2好很多， 没有那么多正则了
+
+  function parserHTML(html) {
+    let stack = [];
+    let root = null;
+
+    function createASTElment(tag, attrs, parent = null) {
+      return {
+        type: 1,
+        tag,
+        parent,
+        attrs,
+        children: []
+      };
+    }
+
+    function start(tagName, attrs) {
+      let parent = stack[stack.length - 1];
+      let element = createASTElment(tagName, attrs, parent);
+      root === null && (root = element);
+      parent && parent.children.push(element);
+      stack.push(element);
+    }
+
+    function end(tagName) {
+      stack.pop().tag !== tagName && console.log('标签出错');
+    }
+
+    function text(chars) {
+      let parent = stack[stack.length - 1];
+      chars = chars.replace(/\s/g, '');
+      parent && chars && parent.children.push({
+        type: 2,
+        text: chars
+      });
+    }
+
+    function advance(len) {
+      html = html.substring(len);
+    }
+
+    function parseStartTag() {
+      const start = html.match(startTagOpen);
+
+      if (start) {
+        const match = {
+          tagName: start[1],
+          attrs: []
+        };
+        advance(start[0].length);
+        let end;
+        let attr;
+
+        while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+          match.attrs.push({
+            name: attr[1],
+            value: attr[3] || attr[4] || attr[5]
+          });
+          advance(attr[0].length);
+        }
+
+        if (end) {
+          advance(end[0].length);
+        }
+
+        return match;
+      }
+
+      return false;
+    }
+
+    while (html) {
+      // 解析标签和文本
+      let index = html.indexOf('<');
+
+      if (index === 0) {
+        // 解析开始标签，并且把属性也解析出来 </div>
+        const startTagMatch = parseStartTag();
+
+        if (startTagMatch) {
+          // 开始标签
+          start(startTagMatch.tagName, startTagMatch.attrs);
+          continue;
+        }
+
+        let endTagMatch;
+
+        if (endTagMatch = html.match(endTag)) {
+          // 结束标签
+          end(endTagMatch[1]);
+          advance(endTagMatch[0].length);
+          continue;
+        }
+
+        break;
+      } // 文本
+
+
+      if (index > 0) {
+        let chars = html.slice(0, index);
+        text(chars);
+        advance(chars.length);
+      }
+    }
+
+    return root;
+  }
+
+  function compileToFunction(template) {
+    // 1.将模板变成ast语法树
+    let ast = parserHTML(template); // 2.代码生成
+
+    let code = generate(ast); // 模板引擎的实现原理都是new Function + with  (ejs, jade等模板引擎都是这样实现的)
+
+    let render = new Function(`with(this){return ${code}}`);
+    return render; // 1.编译原理
+    // 2.响应式原理 依赖收集
+    // 3.组件化开发（贯穿了vue的流程）
+    // 4.diff算法
+  }
+
+  let id = 0;
+
+  class Watcher {
+    constructor(vm, fn, cb, options) {
+      this.vm = vm;
+      this.fn = fn;
+      this.cb = cb;
+      this.options = options;
+      this.id = id++; // dep的id
+
+      this.depsId = new Set(); // 存放的dep
+
+      this.deps = [];
+      this.getter = fn; // fn就是页面的渲染逻辑
+
+      this.get(); // 上来做一次初始化渲染
+    }
+
+    get() {
+      Dep.target = this;
+      this.getter(); // 页面的渲染逻辑
+
+      Dep.target = null; // 渲染完毕清空标识，只有在渲染的时候才会进行依赖收集
+    }
+
+    addDep(dep) {
+      let did = dep.id;
+
+      if (!this.depsId.has(did)) {
+        this.depsId.add(did); // 存放dep
+
+        this.deps.push(dep); // 让dep存放watcher
+
+        dep.addSub(this);
+      }
+    }
+
+    update() {
+      console.log('update'); // 可以做异步更新处理
+
+      this.get();
+    }
+
+  }
+
+  function patch(el, vnode) {
+    // 删除老节点，根据vnode创建新节点，替换掉老节点
+    const elm = createElm(vnode); // 根据虚拟节点创建真实节点
+
+    const parentNode = el.parentNode; //  el.nextSibling不存在就是null,如果为null那insertBefore就是appendChild
+
+    parentNode.insertBefore(elm, el.nextSibling);
+    parentNode.removeChild(el);
+    return elm; // 返回最新的节点
+  } // 面试---- 虚拟节点的实现，如何将虚拟节点渲染成真实节点
+
+  function createElm(vnode) {
+    let {
+      tag,
+      data,
+      children,
+      text,
+      vm
+    } = vnode; // 我们让虚拟节点和真实节点做一个映射关系，后续某个虚拟节点更新了，我可以跟踪到真实节点，并且更新真实节点
+
+    if (typeof tag === 'string') {
+      vnode.el = document.createElement(tag); // 如果有data属性，把他设置到元素上
+
+      updateProperties(vm.$el, data);
+      children.forEach(child => vnode.el.appendChild(createElm(child)));
+    } else {
+      vnode.el = document.createTextNode(text);
+    }
+
+    return vnode.el;
+  } // 后续写diff算法的时候在进行完善，没有考虑样式等
+
+
+  function updateProperties(el, props = {}) {
+    for (const key in props) {
+      el.setAttribute(key, props[key]);
+    }
+  }
+
+  /**
+   * 挂载组件
+   * @param {*} vm 组件实例
+   */
+
+  function mountComponent(vm) {
+    // 初始化流程
+    let updateComponent = () => {
+      vm._update(vm._render()); // render()
+
+    }; // 每个组件都有一个watcher,我们把这个watcher称之为渲染watcher
+
+
+    new Watcher(vm, updateComponent, () => {
+      console.log('后续增添更新钩子函数 update');
+    }, true);
+  }
+  function lifeCycleMixin(Vue) {
+    Vue.prototype._update = function (vnode) {
+      // 采用的是 先序深度遍历 创建节点（遇到节点就创造节点，递归创建）
+      const vm = this;
+      vm.$el = patch(vm.$el, vnode);
+    };
+  }
+
+  function initMixin(Vue) {
+    Vue.prototype._init = function (options) {
+      this.$options = options; // 为了后续扩展的方法，都可以获取到options了
+      // 初始化状态数据
+
+      initState(this);
+
+      if (options.el) {
+        // 将数据挂载到页面上
+        // ast--> render --> 虚拟DOM --> 真实DOM
+        // 更新的时候再次调用render函数 --> 虚拟DOM --> 新旧对比(diff算法) --> 更新真实DOM
+        this.$mount(options.el);
+      }
+    };
+
+    Vue.prototype.$mount = function (el) {
+      const vm = this; // 获取真实DOM
+
+      el = document.querySelector(el); // 将DOM挂载到实例上
+
+      this.$el = el;
+      let options = this.$options;
+
+      if (!options.render) {
+        // 模板编译
+        let template = options.template;
+
+        if (!template) {
+          template = el.outerHTML;
+        }
+
+        let render = compileToFunction(template);
+        options.render = render;
+      } // 挂载组件
+
+
+      mountComponent(vm);
+    };
+  }
+
+  // 创建元素类型的虚拟节点
+  const createElement = (vm, tag, data = {}, ...children) => {
+    return vnode(vm, tag, data, children, data.key, undefined);
+  }; // 创建文本类型的虚拟节点
+
+  const createText = (vm, text) => {
+    return vnode(vm, undefined, undefined, undefined, undefined, text);
+  }; // 创建虚拟节点
+
+  function vnode(vm, tag, data, children, key, text) {
+    return {
+      vm,
+      tag,
+      data,
+      children,
+      key,
+      text
+    };
+  } // vnode 其实就是一个对象， 用来描述节点的，描述dom结构的，可以自己去扩展属性
+  // ast描述语法的，他并没有用户自己的逻辑, 只有语法解析出来的内容
+
+  function renderMixin(Vue) {
+    // createElement 创建元素型的节点
+    Vue.prototype._c = function () {
+      const vm = this;
+      return createElement(vm, ...arguments);
+    }; // 创建文本的虚拟节点
+
+
+    Vue.prototype._v = function (text) {
+      const vm = this; // 描述虚拟节点是属于哪个实例的
+
+      return createText(vm, text);
+    }; // JSON.stringify()
+
+
+    Vue.prototype._s = function (val) {
+      if (isObject(val)) return JSON.stringify(val);
+      return val;
+    };
+
+    Vue.prototype._render = function () {
+      const vm = this;
+      let {
+        render
+      } = vm.$options;
+      let vnode = render.call(vm);
+      return vnode;
+    };
+  }
+
+  function Vue(options) {
+    this._init(options); // 实现Vue初始化功能
+
+  }
+
+  initMixin(Vue);
+  renderMixin(Vue);
+  lifeCycleMixin(Vue); // 导出Vue供别人使用
+  // 1. vue里面用到了观察者模式，默认组件渲染的时候，会创建一个watcher（并且会渲染视图）
+  // 2. 当渲染视图的时候会取data中的数据，会走每个属性的get方法，就让这个属性的dep记录watcher
+  // 3. 同时让watcher也记住dep（这个逻辑目前没用到） dep和watcher是多对多的关系，因为一个属性可能会对应多个视图，1个视图对应多个数据
+  // 4. 如果数据发生变化，会通知对应属性的dep,依次通知存放的watcher去更新
+
+  return Vue;
+
+})));
+//# sourceMappingURL=vue.js.map
